@@ -10,7 +10,7 @@
     "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "build": "vite build",
     "start": "electron .",
-    "pack": "npm run build && electron-builder --dir",
+    "pack": "npm run build && npx @electron/packager . 便利签看板 --platform=win32 --arch=x64 --out=release --overwrite --asar --icon=icon.ico",
     "dist": "npm run build && electron-builder --win",
     "release": "npm run build && electron-builder --win --publish always"
   },
@@ -54,6 +54,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@electron/packager": "^20.0.1",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",

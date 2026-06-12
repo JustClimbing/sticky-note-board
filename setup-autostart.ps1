@@ -20,55 +20,66 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  -> Frontend build done" -ForegroundColor Green
 
-# Step 2: Package Electron
+# Step 2: Package with @electron/packager
 Write-Host "[2/3] Packaging Electron app..." -ForegroundColor Cyan
-npx electron-builder --win --dir
+npx @electron/packager . "便利签看板" --platform=win32 --arch=x64 --out=release --overwrite --asar
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Packaging failed! Try running as Administrator." -ForegroundColor Red
-    Write-Host "If Windows Defender blocks it, disable real-time protection temporarily." -ForegroundColor Yellow
-    exit 1
-}
-Write-Host "  -> Packaging done" -ForegroundColor Green
-
-# Find the exe
-$ExePath = Join-Path (Get-Location) "release\win-unpacked\sticky-note-board.exe"
-$AltPath = Join-Path (Get-Location) "release\win-unpacked\便利签看板.exe"
-
-if (Test-Path $AltPath) {
-    $ExePath = $AltPath
-}
-
-if (-not (Test-Path $ExePath)) {
-    Write-Host "Cannot find exe in release\win-unpacked\" -ForegroundColor Red
+    Write-Host "Packaging failed!" -ForegroundColor Red
     exit 1
 }
 
+# Fix asar: ensure semver/functions/prerelease.js is included
+$AsarPath = Join-Path (Get-Location) "release\便利签看板-win32-x64\resources\app.asar"
+$SemverFuncSrc = Join-Path (Get-Location) "node_modules\electron-updater\node_modules\semver\functions\prerelease.js"
+
+if ((Test-Path $AsarPath) -and (Test-Path $SemverFuncSrc)) {
+    # Check if prerelease.js is missing from asar
+    $asarList = npx asar list $AsarPath 2>$null
+    if ($asarList -notmatch "prerelease") {
+        Write-Host "  -> Fixing asar (adding missing semver module)..." -ForegroundColor Yellow
+        $extractDir = Join-Path (Get-Location) "release\_asar_fix_tmp"
+        npx asar extract $AsarPath $extractDir 2>$null
+        $destFunc = Join-Path $extractDir "node_modules\electron-updater\node_modules\semver\functions"
+        if (Test-Path $destFunc) {
+            Copy-Item $SemverFuncSrc $destFunc -Force
+            npx asar pack $extractDir $AsarPath 2>$null
+            Write-Host "  -> asar fixed!" -ForegroundColor Green
+        }
+        Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$ExePath = Join-Path (Get-Location) "release\便利签看板-win32-x64\便利签看板.exe"
 Write-Host "  -> App path: $ExePath" -ForegroundColor Green
 
-# Step 3: Register scheduled task
-Write-Host "[3/3] Registering auto-start (30s delay)..." -ForegroundColor Cyan
-
-# Remove old task
-try {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
-} catch {
-    # Task didn't exist, that's fine
+if (-not (Test-Path $ExePath)) {
+    Write-Host "Cannot find exe!" -ForegroundColor Red
+    exit 1
 }
 
-# Create action
-$Action = New-ScheduledTaskAction -Execute $ExePath -Argument "--silent"
+# Step 3: Register scheduled task via schtasks (needs admin)
+Write-Host "[3/3] Registering auto-start (30s delay)..." -ForegroundColor Cyan
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$regScript = Join-Path $ScriptDir "register-autostart-admin.ps1"
 
-# Create trigger with delay
-$Trigger = New-ScheduledTaskTrigger -AtLogOn
-$Trigger.Delay = "PT30S"
+# Write a temp script with the correct exe path
+$tempScript = Join-Path $env:TEMP "reg-autostart.ps1"
+@"
+schtasks /Delete /TN "$TaskName" /F 2>`$null
+schtasks /Create /TN "$TaskName" /TR "'$ExePath' --silent" /SC ONLOGON /DELAY 0000:30 /RL LIMITED /F
+"@ | Set-Content -Path $tempScript -Encoding UTF8
 
-# Create settings
-$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+Start-Process powershell -Verb RunAs -ArgumentList "-ExecutionPolicy","Bypass","-File",$tempScript -Wait
+Start-Sleep -Seconds 2
+Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
 
-# Register
-Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Description "Sticky Note Board auto-start" -RunLevel Highest -Force | Out-Null
-
-Write-Host "  -> Auto-start registered!" -ForegroundColor Green
+# Verify
+$taskInfo = schtasks /Query /TN $TaskName /FO CSV /NH 2>$null
+if ($taskInfo -match $TaskName) {
+    Write-Host "  -> Auto-start registered!" -ForegroundColor Green
+} else {
+    Write-Host "  -> WARNING: Could not register auto-start. Try running as Administrator." -ForegroundColor Yellow
+}
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
@@ -77,12 +88,9 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Usage:" -ForegroundColor White
 Write-Host "  - Run now: double-click the exe" -ForegroundColor White
-Write-Host "  - Auto-start: configured, launches 30s after login (hidden to tray)" -ForegroundColor White
-Write-Host "  - Close button: minimizes to system tray, not quit" -ForegroundColor White
+Write-Host "  - Auto-start: launches 30s after login (hidden to tray)" -ForegroundColor White
+Write-Host "  - Close button: minimizes to system tray" -ForegroundColor White
 Write-Host "  - Quit: right-click tray icon -> Quit" -ForegroundColor White
-Write-Host ""
-Write-Host "To disable auto-start:" -ForegroundColor White
-Write-Host '  Unregister-ScheduledTask -TaskName "StickyNoteBoardAutoStart" -Confirm:$false' -ForegroundColor Gray
 Write-Host ""
 
 # Launch now?

@@ -41,8 +41,12 @@
 - **Electron 28** — 桌面应用壳，管理窗口、托盘、系统交互
 - **React 18** — 渲染主窗口的看板 UI
 - **Vite 5** — 构建前端资源（开发热更新 + 生产打包）
-- **electron-builder** — 打包成 Windows .exe 安装包
+- **@electron/packager** — 本地打包成免安装目录（`npm run pack`，已验证稳定）
+- **electron-builder** — GitHub Actions 发版打包成 NSIS 安装包（`npm run dist/release`）
 - **electron-updater** — 检测 GitHub Releases 新版本并自动下载更新
+
+> **为什么本地用 @electron/packager 而不是 electron-builder？**
+> 在 Windows 上 electron-builder 打包时会因为文件锁导致 EPERM rename 错误（`win-unpacked.tmp` → `win-unpacked`），即使关闭 Windows Defender 也无法稳定复现。@electron/packager 不经过 .tmp rename 步骤，打包稳定可靠。GitHub Actions 的干净环境没有此问题，所以发版仍用 electron-builder。
 
 **为什么不用 Electron Forge / electron-vite？**
 为了保持简单透明，直接用最基础的方式：Vite 打包前端到 `dist-renderer/`，Electron 加载它。没有额外的抽象层，改代码时你能清楚看到每个文件在做什么。
@@ -51,29 +55,37 @@
 
 ```
 sticky-note-board/
-├── electron/                 # Electron 主进程代码
-│   ├── main.js              # 入口：窗口管理、托盘、IPC、自启动、自动更新
-│   ├── preload.js           # 安全桥接：通过 contextBridge 暴露 API 给渲染进程
-│   ├── widget.html          # 挂件窗口：独立 HTML，桌面浮标 UI
-│   └── widget.html          # ↑ 自包含 CSS+JS，用 nodeIntegration 直接调 IPC
+├── electron/                       # Electron 主进程代码
+│   ├── main.js                    # 入口：窗口管理、托盘、IPC、自启动、自动更新
+│   ├── preload.js                 # 安全桥接：通过 contextBridge 暴露 API 给渲染进程
+│   ├── widget.html                # 挂件窗口：独立 HTML，桌面浮标 UI（自包含 CSS+JS）
 │
-├── src/                      # React 渲染进程代码（主窗口 UI）
-│   ├── main.jsx             # React 入口
-│   ├── App.jsx              # 根组件：状态管理、笔记 CRUD、自动保存
-│   ├── index.css            # 全局样式（温馨可爱风格的所有 CSS 都在这里）
+├── src/                            # React 渲染进程代码（主窗口 UI）
+│   ├── main.jsx                   # React 入口
+│   ├── App.jsx                    # 根组件：状态管理、笔记 CRUD、自动保存
+│   ├── index.css                  # 全局样式（温馨可爱风格的所有 CSS 都在这里）
 │   └── components/
-│       ├── Toolbar.jsx      # 顶部工具栏：模式切换、功能按钮、窗口控制
-│       ├── Board.jsx        # 看板容器：看板模式（三栏）和自由模式的布局
-│       ├── Note.jsx         # 单张便利贴：拖拽、编辑、换色、删除
-│       └── UpdateNotification.jsx  # 更新通知弹窗（右下角 toast）
+│       ├── Toolbar.jsx            # 顶部工具栏：模式切换、功能按钮、窗口控制
+│       ├── Board.jsx              # 看板容器：看板模式（三栏）和自由模式的布局
+│       ├── Note.jsx               # 单张便利贴：拖拽、编辑、换色、删除
+│       └── UpdateNotification.jsx # 更新通知弹窗（右下角 toast）
 │
 ├── .github/workflows/
-│   └── release.yml          # GitHub Actions：推 tag 时自动打包发布
+│   └── release.yml                # GitHub Actions：推 tag 时自动打包发布
 │
-├── index.html               # Vite 入口 HTML（加载 React 和 Google Fonts）
-├── vite.config.js           # Vite 配置：输出到 dist-renderer/，base 为 ./
-├── package.json             # 依赖、脚本、electron-builder 打包配置
-├── setup-autostart.ps1      # PowerShell 一键打包+注册自启动脚本
+├── release/                        # 打包输出目录（gitignore）
+│   └── 便利签看板-win32-x64/      # @electron/packager 生成的免安装目录
+│       └── 便利签看板.exe         # 可直接双击运行
+│
+├── index.html                     # Vite 入口 HTML（加载 React 和 Google Fonts）
+├── vite.config.js                 # Vite 配置：输出到 dist-renderer/，base 为 ./
+├── package.json                   # 依赖、脚本、electron-builder 发版配置
+├── setup-autostart.ps1            # PowerShell 一键打包+注册自启动脚本
+├── register-autostart-admin.ps1   # UAC 提权注册计划任务脚本
+├── CHANGELOG.md                   # 项目变更日志
+├── AGENTS.md                      # AI 助手上下文（详细版）
+├── .cursorrules                   # Cursor 编辑器 AI 规则
+├── .clinerules                    # Cline 插件 AI 规则
 └── .gitignore
 ```
 
@@ -104,13 +116,14 @@ npm run dev
 
 ### 常用命令
 
-| 命令 | 作用 |
-|------|------|
-| `npm run dev` | 开发模式（热更新） |
-| `npm run build` | 只构建前端到 `dist-renderer/` |
-| `npm run pack` | 构建 + 打包成未压缩目录（用于测试） |
-| `npm run dist` | 构建 + 打包成 NSIS 安装包 .exe |
-| `npm run release` | 构建 + 发布到 GitHub Releases（需要 GH_TOKEN） |
+| 命令 | 作用 | 打包工具 |
+|------|------|---------|
+| `npm run dev` | 开发模式（热更新） | — |
+| `npm run build` | 只构建前端到 `dist-renderer/` | Vite |
+| `npm run pack` | 构建 + 打包到 `release/便利签看板-win32-x64/`（推荐本地使用） | @electron/packager |
+| `npm run dist` | 构建 + 打包成 NSIS 安装包 .exe | electron-builder |
+| `npm run release` | 构建 + 发布到 GitHub Releases（需要 GH_TOKEN） | electron-builder |
+| `.\setup-autostart.ps1` | 一键打包 + 注册开机自启动（需管理员） | @electron/packager |
 
 ## 📝 如何修改
 
@@ -184,18 +197,30 @@ GitHub Actions 自动构建
 
 ### 本地手动打包（不走 GitHub Actions）
 
-```bash
+**推荐方式 — 一键打包+注册自启动：**
+
+```powershell
 # PowerShell 管理员权限
 .\setup-autostart.ps1
 ```
 
-或者手动：
+此脚本会自动：构建前端 → 用 @electron/packager 打包 → 修复 asar 缺失模块 → 注册开机自启动。
+
+**只打包不自启：**
+
+```bash
+npm run pack
+```
+
+打包后的 exe 在 `release/便利签看板-win32-x64/便利签看板.exe`，双击即可运行。
+
+**打 NSIS 安装包（需要发版时用）：**
 
 ```bash
 npm run dist
 ```
 
-生成的安装包在 `release/` 目录下。
+> 注意：`npm run dist` 使用 electron-builder，在 Windows 本地可能遇到 EPERM 文件锁错误。如果遇到，临时关闭 Windows Defender 实时扫描后重试。GitHub Actions 环境不会有此问题。
 
 ## 🤖 AI 辅助开发
 
@@ -204,6 +229,32 @@ npm run dist
 - `.cursorrules` — Cursor 编辑器读取
 - `.clinerules` — Cline 插件读取
 - `AGENTS.md` — 通用格式，其他 AI 工具也可参考
+
+## ⚠️ 已知问题与解决方案
+
+### electron-builder EPERM 文件锁
+
+`npm run dist` 在 Windows 本地打包时，electron-builder 会将解压目录从 `win-unpacked.tmp` 重命名为 `win-unpacked`，但 Windows Defender 或文件系统可能锁定其中的文件，导致 `EPERM: operation not permitted, rename` 错误。
+
+**解决方案：** 本地打包用 `npm run pack`（@electron/packager），GitHub Actions 发版用 `npm run dist`（electron-builder，干净环境无此问题）。
+
+### @electron/packager asar 缺失 semver 模块
+
+@electron/packager 打出的 asar 偶尔会缺失 `electron-updater/node_modules/semver/functions/prerelease.js`，导致启动报 `Cannot find module './functions/prerelease'`。
+
+**解决方案：** `setup-autostart.ps1` 脚本已内置自动检测和修复逻辑——提取 asar、补入缺失文件、重新打包。手动打包时如遇此问题，执行以下命令修复：
+
+```bash
+cd release/便利签看板-win32-x64/resources
+npx asar extract app.asar app_fix
+cp ../../../node_modules/electron-updater/node_modules/semver/functions/prerelease.js app_fix/node_modules/electron-updater/node_modules/semver/functions/
+npx asar pack app_fix app.asar
+rm -rf app_fix
+```
+
+## 📋 变更日志
+
+详见 [CHANGELOG.md](CHANGELOG.md)，记录了每次版本更新的内容。
 
 ## 📄 License
 

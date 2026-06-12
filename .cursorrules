@@ -15,4 +15,8 @@ Key rules:
 - Frameless windows, drag via -webkit-app-region.
 - Vite base must be './' for Electron file:// loading.
 - Changes to electron/ require Electron restart; src/ hot-reloads via Vite.
+- Local packaging: npm run pack (@electron/packager, stable).
+- Release packaging: npm run dist (electron-builder, GitHub Actions).
 - Release: npm version patch && git push --tags triggers GitHub Actions auto-build.
+- Known issue: @electron/packager may omit semver/functions/prerelease.js from asar. setup-autostart.ps1 auto-fixes this.
+- See CHANGELOG.md for version history.
