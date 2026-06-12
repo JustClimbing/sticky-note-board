@@ -1,0 +1,18 @@
+You are working on "便利签看板", an Electron 28 + React 18 + Vite 5 desktop sticky note board app for Windows.
+
+Read AGENTS.md in the project root for full project context before making changes.
+
+Key rules:
+- Main process: electron/main.js (Node.js) — windows, tray, IPC, auto-update
+- Renderer: src/ (React, browser env) — UI components, call Electron via window.electronAPI
+- Bridge: electron/preload.js — contextBridge whitelist
+- Widget: electron/widget.html — standalone, self-contained HTML
+- Styles: src/index.css — all CSS in one file, :root variables for theming
+- Data: %APPDATA%/sticky-note-board/notes.json via notes:load/notes:save IPC
+- IPC naming: module:action (e.g. notes:save, widget:click, update:available)
+- CSS classes: kebab-case. Components: PascalCase. Comments: Chinese.
+- No state management lib, no router, no CSS framework, no Tailwind.
+- Frameless windows, drag via -webkit-app-region.
+- Vite base must be './' for Electron file:// loading.
+- Changes to electron/ require Electron restart; src/ hot-reloads via Vite.
+- Release: npm version patch && git push --tags triggers GitHub Actions auto-build.

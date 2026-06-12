@@ -1,0 +1,210 @@
+# 📌 便利签看板
+
+一个温馨可爱风格的桌面便利贴看板应用，基于 Electron + React 构建。支持看板分栏与自由布局双模式，窗口置顶、开机自启、挂件模式、GitHub 自动更新。
+
+## ✨ 功能特性
+
+- **双模式布局** — 看板模式（待办/进行中/已完成三栏）和自由模式（便利贴随意摆放）
+- **拖拽交互** — 拖拽移动便利贴，看板模式下自动吸附到对应列
+- **双击创建** — 双击空白区域创建新便利贴，随机分配柔和配色
+- **6种配色** — 阳光黄、樱花粉、薄荷绿、天空蓝、蜜桃橙、嫩草绿
+- **窗口置顶** — 让看板始终浮在其他窗口上方
+- **挂件模式** — 缩小为桌面浮标，点击弹出完整看板
+- **托盘常驻** — 关闭按钮不会退出应用，而是最小化到系统托盘
+- **开机自启动** — 通过 Windows 任务计划延迟 30 秒静默启动，不拖慢开机
+- **自动更新** — 检测到 GitHub 新版本后右下角弹窗通知，一键下载更新
+
+## 🏗️ 架构概览
+
+```
+┌─────────────────────────────────────────────┐
+│                 Electron 主进程               │
+│  electron/main.js                           │
+│  ┌──────────┐ ┌──────────┐ ┌─────────────┐ │
+│  │ 主窗口    │ │ 挂件窗口  │ │ 系统托盘     │ │
+│  │ (React)  │ │ (HTML)   │ │ (Tray Icon) │ │
+│  └────┬─────┘ └────┬─────┘ └─────────────┘ │
+│       │             │                        │
+│  ┌────┴─────────────┴───────────────────┐   │
+│  │           IPC 通信层                   │   │
+│  │  preload.js (contextBridge)          │   │
+│  └──────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────┐   │
+│  │  数据持久化 (notes.json)              │   │
+│  │  自启动管理 (schtasks)                │   │
+│  │  自动更新 (electron-updater)          │   │
+│  └──────────────────────────────────────┘   │
+└─────────────────────────────────────────────┘
+```
+
+**技术栈：**
+- **Electron 28** — 桌面应用壳，管理窗口、托盘、系统交互
+- **React 18** — 渲染主窗口的看板 UI
+- **Vite 5** — 构建前端资源（开发热更新 + 生产打包）
+- **electron-builder** — 打包成 Windows .exe 安装包
+- **electron-updater** — 检测 GitHub Releases 新版本并自动下载更新
+
+**为什么不用 Electron Forge / electron-vite？**
+为了保持简单透明，直接用最基础的方式：Vite 打包前端到 `dist-renderer/`，Electron 加载它。没有额外的抽象层，改代码时你能清楚看到每个文件在做什么。
+
+## 📁 项目结构
+
+```
+sticky-note-board/
+├── electron/                 # Electron 主进程代码
+│   ├── main.js              # 入口：窗口管理、托盘、IPC、自启动、自动更新
+│   ├── preload.js           # 安全桥接：通过 contextBridge 暴露 API 给渲染进程
+│   ├── widget.html          # 挂件窗口：独立 HTML，桌面浮标 UI
+│   └── widget.html          # ↑ 自包含 CSS+JS，用 nodeIntegration 直接调 IPC
+│
+├── src/                      # React 渲染进程代码（主窗口 UI）
+│   ├── main.jsx             # React 入口
+│   ├── App.jsx              # 根组件：状态管理、笔记 CRUD、自动保存
+│   ├── index.css            # 全局样式（温馨可爱风格的所有 CSS 都在这里）
+│   └── components/
+│       ├── Toolbar.jsx      # 顶部工具栏：模式切换、功能按钮、窗口控制
+│       ├── Board.jsx        # 看板容器：看板模式（三栏）和自由模式的布局
+│       ├── Note.jsx         # 单张便利贴：拖拽、编辑、换色、删除
+│       └── UpdateNotification.jsx  # 更新通知弹窗（右下角 toast）
+│
+├── .github/workflows/
+│   └── release.yml          # GitHub Actions：推 tag 时自动打包发布
+│
+├── index.html               # Vite 入口 HTML（加载 React 和 Google Fonts）
+├── vite.config.js           # Vite 配置：输出到 dist-renderer/，base 为 ./
+├── package.json             # 依赖、脚本、electron-builder 打包配置
+├── setup-autostart.ps1      # PowerShell 一键打包+注册自启动脚本
+└── .gitignore
+```
+
+## 🚀 开发指南
+
+### 环境要求
+
+- Node.js 18+
+- npm（随 Node.js 安装）
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 启动开发模式
+
+```bash
+npm run dev
+```
+
+这会同时启动两个进程：
+- Vite 开发服务器（localhost:5173，支持热更新）
+- Electron 窗口（加载 Vite 服务器页面）
+
+改 `src/` 下的文件会即时刷新，改 `electron/` 下的文件需要重启 Electron（Ctrl+C 后重新 `npm run dev`）。
+
+### 常用命令
+
+| 命令 | 作用 |
+|------|------|
+| `npm run dev` | 开发模式（热更新） |
+| `npm run build` | 只构建前端到 `dist-renderer/` |
+| `npm run pack` | 构建 + 打包成未压缩目录（用于测试） |
+| `npm run dist` | 构建 + 打包成 NSIS 安装包 .exe |
+| `npm run release` | 构建 + 发布到 GitHub Releases（需要 GH_TOKEN） |
+
+## 📝 如何修改
+
+### 改界面样式
+
+所有 CSS 都在 `src/index.css` 里，按功能分区注释了。改颜色变量找 `:root` 区块，改便利贴外观找 `.sticky-note` 区块，改工具栏找 `.toolbar` 区块。
+
+### 改便利贴配色
+
+在 `src/App.jsx` 的 `addNote` 函数里有一个 `colors` 数组，增删颜色就行。`src/components/Note.jsx` 里也有 `NOTE_COLORS` 数组（换色面板用的），两边保持一致。
+
+### 改看板列
+
+在 `src/components/Board.jsx` 的 `KANBAN_COLUMNS` 数组里增删列。每列需要 `id`、`label`、`emoji` 三个字段。
+
+### 改挂件外观
+
+挂件是独立的 `electron/widget.html`，所有 CSS 和 JS 都内联在里面。它是一个透明背景的 80×90px 小窗口，设置了 `alwaysOnTop: true`。
+
+### 加新功能
+
+1. 如果需要跟 Electron 交互（窗口控制、文件读写等）：在 `electron/main.js` 加 IPC handler，在 `preload.js` 暴露 API，然后在 React 组件里通过 `window.electronAPI.xxx()` 调用
+2. 如果是纯 UI 功能：直接在 `src/components/` 下加组件，在 `App.jsx` 里引入
+
+### 数据怎么存的
+
+笔记数据保存在 `%APPDATA%/sticky-note-board/notes.json`（Windows），由主进程通过 `fs` 读写。每次笔记变更后 300ms 自动保存（防抖）。
+
+## 📦 发版流程
+
+### 完整流程（你只需要做这些）
+
+```bash
+# 1. 改完代码，确认 npm run dev 运行正常
+
+# 2. 升版本号（三选一）
+npm version patch   # 1.0.0 → 1.0.1（修 bug）
+npm version minor   # 1.0.0 → 1.1.0（加功能）
+npm version major   # 1.0.0 → 2.0.0（大改）
+
+# 3. 推送代码和 tag
+git push && git push --tags
+```
+
+### 然后自动发生的事
+
+1. GitHub Actions 检测到 `v*` tag → 自动在 Windows 虚拟机上运行
+2. `npm ci` 安装依赖 → `npm run build` 构建前端 → `electron-builder` 打包
+3. 生成 `便利签看板 Setup X.X.X.exe` 安装包 → 发布到 GitHub Releases
+4. 已安装的用户下次打开应用 5 秒后检测到新版本 → 右下角弹通知
+
+### 自动更新链路图
+
+```
+你 git push --tags
+    ↓
+GitHub Actions 自动构建
+    ↓
+发布到 GitHub Releases（带 .exe + latest.yml）
+    ↓
+用户的应用启动 → electron-updater 检查 Releases
+    ↓
+发现新版本 → 右下角弹出 "发现新版本 vX.X.X"
+    ↓
+用户点 "立即更新" → 显示下载进度条
+    ↓
+下载完成 → 弹出 "重启安装"
+    ↓
+用户点 "立即重启" → 自动安装并重启应用
+```
+
+### 本地手动打包（不走 GitHub Actions）
+
+```bash
+# PowerShell 管理员权限
+.\setup-autostart.ps1
+```
+
+或者手动：
+
+```bash
+npm run dist
+```
+
+生成的安装包在 `release/` 目录下。
+
+## 🤖 AI 辅助开发
+
+本项目适合 vibe coding。如果你使用 AI 编程助手，以下上下文文件可帮助 AI 理解项目：
+
+- `.cursorrules` — Cursor 编辑器读取
+- `.clinerules` — Cline 插件读取
+- `AGENTS.md` — 通用格式，其他 AI 工具也可参考
+
+## 📄 License
+
+MIT
