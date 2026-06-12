@@ -1,0 +1,14 @@
+node_modules/
+dist-renderer/
+release/
+.DS_Store
+*.log
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+.env
+.env.local
+Thumbs.db
+desktop.ini

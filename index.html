@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>便利签看板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+QingKe+HuangYou&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: 'Ma Shan Zheng', 'Segoe UI', sans-serif;
+        background: #FFF8F0;
+        overflow: hidden;
+      }
+      #root { width: 100vw; height: 100vh; }
+      #app-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #D4A574;
+        font-size: 1.2rem;
+        font-family: 'Ma Shan Zheng', sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="app-loading">便利签看板 加载中...</div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
