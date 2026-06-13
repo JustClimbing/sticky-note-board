@@ -125,3 +125,7 @@ git push && git push --tags  # 推送后 GitHub Actions 自动构建发布
 6. **自启动需要管理员权限**：`schtasks` 创建任务需要管理员权限，`setup-autostart.ps1` 通过 UAC 提权处理
 7. **Vite base 必须是 `./`**：因为 Electron 用 `file://` 协议加载 HTML，相对路径才能正确解析资源
 8. **PowerShell 脚本中 `$` 变量被 bash 吞掉**：从 bash 调用 PowerShell 时，`$` 变量会被 bash 解释。解决方案：将 PowerShell 脚本写入 .ps1 文件后用 `-File` 参数执行，而非用 `-Command` 内联
+9. **PowerShell 5.1 中文路径乱码（致命）**：PowerShell 5.1 读取无 BOM 的 UTF-8 文件时按 GBK 解析，导致中文路径损坏，计划任务注册后 exe 找不到文件。**解决方案**：
+   - 含中文路径的 .ps1 文件必须保存为 **UTF-8 with BOM**（`EF BB BF` 开头）
+   - 注册计划任务使用 PowerShell COM API（`Schedule.Service`），不用 `schtasks` 命令行
+   - `setup-autostart.ps1` 和 `register-autostart-admin.ps1` 已预置 BOM

@@ -1,4 +1,4 @@
-# Register Sticky Note Board auto-start via Windows Task Scheduler
+﻿# Register Sticky Note Board auto-start via Windows Task Scheduler
 $TaskName = "StickyNoteBoardAutoStart"
 $ExePath = "E:\007-创意小项目\sticky-note-board\release\便利签看板-win32-x64\便利签看板.exe"
 

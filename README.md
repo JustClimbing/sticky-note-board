@@ -252,6 +252,12 @@ npx asar pack app_fix app.asar
 rm -rf app_fix
 ```
 
+### PowerShell 5.1 中文路径编码损坏
+
+Windows 默认的 PowerShell 5.1 读取无 BOM 标记的 UTF-8 文件时，会按系统默认编码（中文系统为 GBK）解析，导致中文路径被损坏。此外 `schtasks` 命令行工具也会在存储路径时破坏中文字符。表现为计划任务注册成功但启动时找不到 exe 文件（错误码 `-2147024894`）。
+
+**解决方案：** 所有包含中文路径的 `.ps1` 文件必须保存为 **UTF-8 with BOM**（文件头 `EF BB BF`）。注册计划任务时使用 PowerShell COM API（`Schedule.Service`）替代 `schtasks` 命令行。项目的 `setup-autostart.ps1` 和 `register-autostart-admin.ps1` 已预置 BOM 编码和 COM API 方式。
+
 ## 📋 变更日志
 
 详见 [CHANGELOG.md](CHANGELOG.md)，记录了每次版本更新的内容。

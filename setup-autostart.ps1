@@ -1,4 +1,4 @@
-# ==========================================
+﻿# ==========================================
 #  Sticky Note Board - Build & Auto-Start
 # ==========================================
 
@@ -57,29 +57,66 @@ if (-not (Test-Path $ExePath)) {
     exit 1
 }
 
-# Step 3: Register scheduled task via schtasks (needs admin)
+# Step 3: Register scheduled task (needs admin for COM API)
 Write-Host "[3/3] Registering auto-start (30s delay)..." -ForegroundColor Cyan
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$regScript = Join-Path $ScriptDir "register-autostart-admin.ps1"
 
-# Write a temp script with the correct exe path
+# Write a temp script using COM API (handles Chinese paths correctly)
+# IMPORTANT: must be saved with UTF-8 BOM for PowerShell 5.1 to read Chinese chars
 $tempScript = Join-Path $env:TEMP "reg-autostart.ps1"
-@"
-schtasks /Delete /TN "$TaskName" /F 2>`$null
-schtasks /Create /TN "$TaskName" /TR "'$ExePath' --silent" /SC ONLOGON /DELAY 0000:30 /RL LIMITED /F
-"@ | Set-Content -Path $tempScript -Encoding UTF8
+$scriptContent = @"
+`$ExePath = "$ExePath"
+`$TaskName = "$TaskName"
+
+try { Unregister-ScheduledTask -TaskName `$TaskName -Confirm:`$false -ErrorAction Stop } catch {}
+
+`$svc = New-Object -ComObject('Schedule.Service')
+`$svc.Connect()
+`$folder = `$svc.GetFolder('\')
+`$td = `$svc.NewTask(0)
+
+`$act = `$td.Actions.Create(0)
+`$act.Path = `$ExePath
+`$act.Arguments = '--silent'
+`$act.WorkingDirectory = Split-Path `$ExePath
+
+`$trig = `$td.Triggers.Create(9)
+`$trig.Delay = 'PT30S'
+
+`$td.Settings.DisallowStartIfOnBatteries = `$false
+`$td.Settings.StopIfGoingOnBatteries = `$false
+`$td.Settings.StartWhenAvailable = `$true
+`$td.Settings.ExecutionTimeLimit = 'PT0S'
+
+`$folder.RegisterTaskDefinition(`$TaskName, `$td, 6, `$null, `$null, 3) | Out-Null
+
+`$t = `$folder.GetTask(`$TaskName)
+`$p = `$t.Definition.Actions.Item(1).Path
+if (Test-Path `$p) { Write-Host "OK" } else { Write-Host "FAIL" }
+Start-Sleep 2
+"@
+# Save with UTF-8 BOM (critical for Chinese path support in PS 5.1)
+$utf8BOM = New-Object System.Text.UTF8Encoding($true)
+[System.IO.File]::WriteAllText($tempScript, $scriptContent, $utf8BOM)
 
 Start-Process powershell -Verb RunAs -ArgumentList "-ExecutionPolicy","Bypass","-File",$tempScript -Wait
 Start-Sleep -Seconds 2
-Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
 
-# Verify
-$taskInfo = schtasks /Query /TN $TaskName /FO CSV /NH 2>$null
-if ($taskInfo -match $TaskName) {
-    Write-Host "  -> Auto-start registered!" -ForegroundColor Green
-} else {
-    Write-Host "  -> WARNING: Could not register auto-start. Try running as Administrator." -ForegroundColor Yellow
+# Verify by reading path via COM API
+try {
+    $svc = New-Object -ComObject("Schedule.Service")
+    $svc.Connect()
+    $task = $svc.GetFolder("\").GetTask($TaskName)
+    $storedPath = $task.Definition.Actions.Item(1).Path
+    if (Test-Path $storedPath) {
+        Write-Host "  -> Auto-start registered! Path OK" -ForegroundColor Green
+    } else {
+        Write-Host "  -> WARNING: Task registered but path not found: $storedPath" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "  -> WARNING: Could not verify auto-start." -ForegroundColor Yellow
 }
+
+Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
