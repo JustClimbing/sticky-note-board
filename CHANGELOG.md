@@ -39,7 +39,8 @@
 - `.cursorrules` / `.clinerules`：精简版 AI 助手规则
 - `CHANGELOG.md`：本文件
 
-### 已知问题
+### 已知问题与修复
 
 - electron-builder 在 Windows 本地打包有 EPERM 文件锁问题，已改用 @electron/packager 本地打包
 - @electron/packager 打出的 asar 偶尔缺失 `semver/functions/prerelease.js`，`setup-autostart.ps1` 已内置自动修复
+- PowerShell 5.1 中文路径编码问题：含中文路径的 .ps1 文件必须保存为 UTF-8 with BOM，计划任务注册必须使用 COM API 而非 schtasks 命令行（已修复）
