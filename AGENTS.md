@@ -43,7 +43,8 @@
 ### 自启动机制
 
 - 使用 Windows `schtasks` 注册 `onlogon` 触发器，延迟 30 秒
-- 启动参数 `--silent` 表示静默模式（窗口隐藏，只在托盘显示）
+- 启动参数 `--silent` 表示静默模式：主窗口隐藏（只在托盘），**自动开启挂件模式**（桌面浮标）
+- 用户点击桌面挂件 → 弹出完整看板；右键挂件可关闭挂件或退出应用
 - 通过 `isAutoLaunchEnabled()` / `enableAutoLaunch()` / `disableAutoLaunch()` 管理
 
 ### 自动更新机制

@@ -448,6 +448,12 @@ app.whenReady().then(() => {
   createTray();
   initAutoUpdater();
 
+  // 静默启动时自动开启挂件模式（桌面浮标，点击弹出看板）
+  if (isSilentLaunch) {
+    widgetEnabled = true;
+    createWidgetWindow();
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
