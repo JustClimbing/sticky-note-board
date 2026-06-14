@@ -1,6 +1,6 @@
 {
   "name": "sticky-note-board",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "温馨便利签看板 - 桌面端",
   "author": "lijiale",
   "main": "electron/main.js",
