@@ -9,6 +9,11 @@ const NOTE_COLORS = [
   { name: '嫩草绿', value: '#E2F0CB' },
 ];
 
+const MIN_WIDTH = 140;
+const MIN_HEIGHT = 120;
+const MIN_FONT = 10;
+const MAX_FONT = 28;
+
 export default function Note({
   note,
   isSelected,
@@ -21,9 +26,11 @@ export default function Note({
   const noteRef = useRef(null);
   const textRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, noteX: 0, noteY: 0 });
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
   // Auto-focus new empty notes
   useEffect(() => {
@@ -36,7 +43,12 @@ export default function Note({
   // ──── Drag ────
   const handlePointerDown = useCallback(
     (e) => {
-      if (e.target.closest('.note-actions') || e.target.tagName === 'TEXTAREA')
+      if (
+        e.target.closest('.note-actions') ||
+        e.target.closest('.note-resize-handle') ||
+        e.target.closest('.note-color-picker') ||
+        e.target.tagName === 'TEXTAREA'
+      )
         return;
       e.preventDefault();
       onSelect(note.id);
@@ -54,8 +66,41 @@ export default function Note({
     [note.id, onSelect]
   );
 
+  // ──── Resize ────
+  const handleResizeDown = useCallback(
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelect(note.id);
+
+      const rect = noteRef.current.getBoundingClientRect();
+      resizeStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        w: rect.width,
+        h: rect.height,
+      };
+      setIsResizing(true);
+      noteRef.current.setPointerCapture(e.pointerId);
+    },
+    [note.id, onSelect]
+  );
+
   const handlePointerMove = useCallback(
     (e) => {
+      if (isResizing) {
+        const dw = e.clientX - resizeStart.current.x;
+        const dh = e.clientY - resizeStart.current.y;
+        const newW = Math.max(MIN_WIDTH, resizeStart.current.w + dw);
+        const newH = Math.max(MIN_HEIGHT, resizeStart.current.h + dh);
+        if (noteRef.current) {
+          noteRef.current.style.width = `${newW}px`;
+          noteRef.current.style.minHeight = `${newH}px`;
+          noteRef.current.style.transition = 'none';
+        }
+        return;
+      }
+
       if (!isDragging) return;
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
@@ -70,11 +115,23 @@ export default function Note({
         noteRef.current.style.transition = 'none';
       }
     },
-    [isDragging]
+    [isDragging, isResizing]
   );
 
   const handlePointerUp = useCallback(
     (e) => {
+      if (isResizing) {
+        setIsResizing(false);
+        if (noteRef.current) {
+          const rect = noteRef.current.getBoundingClientRect();
+          noteRef.current.style.width = '';
+          noteRef.current.style.minHeight = '';
+          noteRef.current.style.transition = '';
+          onUpdate(note.id, { width: Math.round(rect.width), height: Math.round(rect.height) });
+        }
+        return;
+      }
+
       if (!isDragging) return;
       setIsDragging(false);
 
@@ -88,7 +145,7 @@ export default function Note({
         onDragEnd(note.id, rect.left, rect.top);
       }
     },
-    [isDragging, note.id, onDragEnd]
+    [isDragging, isResizing, note.id, onDragEnd, onUpdate]
   );
 
   // ──── Edit ────
@@ -116,6 +173,17 @@ export default function Note({
     [note.id, onUpdate]
   );
 
+  // ──── Font Size ────
+  const handleFontIncrease = useCallback(() => {
+    const current = note.fontSize || 15;
+    onUpdate(note.id, { fontSize: Math.min(MAX_FONT, current + 2) });
+  }, [note.id, note.fontSize, onUpdate]);
+
+  const handleFontDecrease = useCallback(() => {
+    const current = note.fontSize || 15;
+    onUpdate(note.id, { fontSize: Math.max(MIN_FONT, current - 2) });
+  }, [note.id, note.fontSize, onUpdate]);
+
   // ──── Determine style ────
   let style = {};
   if (mode === 'free') {
@@ -126,10 +194,16 @@ export default function Note({
     };
   }
 
+  // Apply saved size
+  if (note.width) style.width = `${note.width}px`;
+  if (note.height) style.minHeight = `${note.height}px`;
+
+  const textStyle = note.fontSize ? { fontSize: `${note.fontSize}px` } : {};
+
   return (
     <div
       ref={noteRef}
-      className={`sticky-note ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
+      className={`sticky-note ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isResizing ? 'resizing' : ''}`}
       style={{ ...style, backgroundColor: note.color }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -140,6 +214,12 @@ export default function Note({
 
       {/* Action buttons */}
       <div className="note-actions">
+        <button className="note-action-btn" onClick={handleFontDecrease} title="缩小字体">
+          A-
+        </button>
+        <button className="note-action-btn" onClick={handleFontIncrease} title="放大字体">
+          A+
+        </button>
         <button
           className="note-action-btn"
           onClick={() => setShowColorPicker(!showColorPicker)}
@@ -181,10 +261,17 @@ export default function Note({
         onBlur={handleTextBlur}
         placeholder="写点什么..."
         readOnly={!isEditing && !isSelected}
+        style={textStyle}
       />
 
       {/* Corner fold decoration */}
       <div className="note-fold" />
+
+      {/* Resize handle */}
+      <div
+        className="note-resize-handle"
+        onPointerDown={handleResizeDown}
+      />
     </div>
   );
 }

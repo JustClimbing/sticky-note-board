@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import Note from './Note';
 
 const KANBAN_COLUMNS = [
@@ -17,6 +17,7 @@ export default function Board({
   onBoardDoubleClick,
 }) {
   const boardRef = useRef(null);
+  const bucketRef = useRef(null);
 
   const handleDoubleClick = useCallback(
     (e) => {
@@ -37,6 +38,23 @@ export default function Board({
         if (relX > colWidth * 2) column = 'done';
         else if (relX > colWidth) column = 'doing';
         onUpdateNote(id, { column });
+      } else if (viewMode === 'free' && bucketRef.current) {
+        // Check if note was dropped onto the done bucket
+        const bucketRect = bucketRef.current.getBoundingClientRect();
+        const noteCenterX = x + 90; // approximate note half-width
+        const noteCenterY = y + 80; // approximate note half-height
+        const overBucket =
+          noteCenterX > bucketRect.left &&
+          noteCenterX < bucketRect.right &&
+          noteCenterY > bucketRect.top &&
+          noteCenterY < bucketRect.bottom;
+
+        if (overBucket) {
+          // Mark as done: move to kanban "done" column
+          onUpdateNote(id, { column: 'done' });
+        } else {
+          onUpdateNote(id, { x, y });
+        }
       } else {
         onUpdateNote(id, { x, y });
       }
@@ -68,6 +86,7 @@ export default function Board({
           onUpdateNote={onUpdateNote}
           onDeleteNote={onDeleteNote}
           onDragEnd={handleDragEnd}
+          bucketRef={bucketRef}
         />
       )}
     </div>
@@ -83,7 +102,10 @@ function FreeView({
   onUpdateNote,
   onDeleteNote,
   onDragEnd,
+  bucketRef,
 }) {
+  const [bucketHover, setBucketHover] = useState(false);
+
   return (
     <>
       {notes.map((note) => (
@@ -98,6 +120,20 @@ function FreeView({
           mode="free"
         />
       ))}
+
+      {/* Done bucket */}
+      <div
+        ref={bucketRef}
+        className={`done-bucket ${bucketHover ? 'done-bucket-hover' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); setBucketHover(true); }}
+        onDragLeave={() => setBucketHover(false)}
+        onDrop={(e) => { e.preventDefault(); setBucketHover(false); }}
+      >
+        <div className="done-bucket-icon">🗑️</div>
+        <div className="done-bucket-label">拖入完成</div>
+        <div className="done-bucket-hint">拖到这里 → 看板「已完成」</div>
+      </div>
+
       <div className="free-view-hint">
         <span>💡 双击空白处添加便利贴</span>
       </div>
