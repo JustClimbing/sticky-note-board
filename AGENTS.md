@@ -14,6 +14,7 @@
 - **@electron/packager** — 本地打包工具（`npm run pack`，输出到 `release/便利签看板-win32-x64/`）
 - **electron-builder** — GitHub Actions 发版打包（`npm run dist/release`，输出 NSIS 安装包）
 - **electron-updater** — GitHub Releases 自动更新
+- **marked** — Markdown 解析库，用于 `md-editor.html` 中块级即时渲染
 - 无状态管理库，所有状态在 `App.jsx` 用 useState 管理
 - 无路由，单页面应用
 - 无 Tailwind/CSS 框架，所有样式在 `src/index.css` 手写
@@ -27,18 +28,40 @@
 - **preload.js**：安全桥接层，用 `contextBridge.exposeInMainWorld` 暴露白名单 API
 - **挂件窗口** (`electron/widget.html`)：独立的透明小窗口，用 `nodeIntegration: true` 直接调 `ipcRenderer`
 
+### Markdown 编辑器窗口
+
+- **文件**：`electron/md-editor.html`，独立的 Electron 窗口，与挂件窗口类似使用 `nodeIntegration: true` 直接调 `ipcRenderer`
+- **块级即时渲染**（Typora 风格）：
+  - 将 Markdown 文本按空行分割为"块"（保护代码块不被拆开，用占位符替换后再 split）
+  - 每个块渲染为 `<div>`，显示 `marked` 解析后的 HTML；点击任意块切换为 `<textarea>` 编辑态
+  - 失焦（blur）、Escape、Enter（在非 Shift 时分割块）时重新渲染
+  - Backspace 在块首时与前一块合并；方向键上下在块间导航
+- **图片粘贴**：`handlePaste()` 拦截剪贴板图片 → 读取 base64 → 通过 `md:save-image` IPC 存盘 → 返回 `md-notes://images/xxx.png` 路径 → 插入 Markdown 图片语法
+- **自定义协议 `md-notes://`**：
+  - 在 `app.whenReady()` 之前调用 `protocol.registerSchemesAsPrivileged` 注册为 standard + secure
+  - 在 `app.whenReady()` 中调用 `protocol.registerFileProtocol` 将 URL 映射到笔记存储目录下的文件
+  - 解决了编辑器 HTML 从 `electron/` 目录加载时无法解析笔记目录中图片路径的问题
+- **配置管理**：`config.json` 存储在 `userData` 目录，保存笔记文件夹路径等偏好。通过 `loadConfig()` / `saveConfig()` 读写
+- **笔记存储**：默认路径 `%APPDATA%/sticky-note-board/markdown-notes/`，用户可通过 `md:select-folder` 自定义
+- **自动保存**：编辑后 600ms 防抖自动保存到磁盘
+
 ### IPC 通信约定
 
 - 主进程 → 渲染进程：`mainWindow.webContents.send('channel', data)`
 - 渲染进程 → 主进程（请求/响应）：`ipcMain.handle('channel', handler)` + `ipcRenderer.invoke('channel')`
 - 渲染进程 → 主进程（单向通知）：`ipcMain.on('channel', handler)` + `ipcRenderer.send('channel')`
 - 所有 IPC channel 命名格式：`模块:动作`，如 `window:minimize`、`notes:save`、`update:available`
+- Markdown 编辑器 IPC：`md:list`（列表）、`md:create`（新建）、`md:read`（读取）、`md:save`（保存）、`md:delete`（删除）、`md:select-folder`（选文件夹）、`md:get-folder`（获取路径）、`md:save-image`（保存图片）
+- 编辑器窗口控制 IPC：`md-editor:open`、`md-editor:minimize`、`md-editor:close`、`md-editor:toggle-always-on-top`
 
 ### 数据持久化
 
 - 笔记数据存储在 `%APPDATA%/sticky-note-board/notes.json`
 - 通过 `notes:load` / `notes:save` IPC 读写
 - 渲染进程有 300ms 防抖自动保存
+- Markdown 笔记默认存储在 `%APPDATA%/sticky-note-board/markdown-notes/`
+- 用户偏好（含笔记文件夹路径）存储在 `%APPDATA%/sticky-note-board/config.json`
+- 图片保存在笔记目录的 `images/` 子文件夹中，通过 `md-notes://` 协议引用
 
 ### 自启动机制
 
@@ -87,6 +110,8 @@ setup-autostart.ps1
 | 窗口行为 | `electron/main.js` 的 `createWindow()` |
 | 托盘菜单 | `electron/main.js` 的 `createTray()` / `refreshTrayMenu()` |
 | 挂件外观 | `electron/widget.html`（自包含 HTML+CSS+JS） |
+| Markdown 编辑器 | `electron/md-editor.html`（自包含 HTML+CSS+JS，使用 `marked` 库） |
+| Markdown 笔记存储路径 | `electron/main.js` 的 `getMdNotesFolder()` / `config.json` |
 | 新增 Electron API | `electron/main.js` 加 handler → `electron/preload.js` 暴露 → React 里调 `window.electronAPI.xxx()` |
 
 ## 编码约定
@@ -130,3 +155,5 @@ git push && git push --tags  # 推送后 GitHub Actions 自动构建发布
    - 含中文路径的 .ps1 文件必须保存为 **UTF-8 with BOM**（`EF BB BF` 开头）
    - 注册计划任务使用 PowerShell COM API（`Schedule.Service`），不用 `schtasks` 命令行
    - `setup-autostart.ps1` 和 `register-autostart-admin.ps1` 已预置 BOM
+10. **Markdown 编辑器图片路径**：编辑器 HTML 从 `electron/` 目录加载，无法用相对路径引用笔记目录中的图片。必须使用自定义 `md-notes://` 协议解析图片路径，不要用 `file://` 或相对路径
+11. **Markdown 编辑器窗口不能热更新**：`md-editor.html` 是独立文件，修改后需重启 Electron

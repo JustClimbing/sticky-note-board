@@ -7,6 +7,7 @@ const {
   nativeImage,
   screen,
   dialog,
+  protocol,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -17,14 +18,56 @@ let mainWindow;
 let tray;
 let widgetWindow = null;
 let widgetEnabled = false;
+let mdEditorWindow = null;
 const userDataPath = app.getPath('userData');
 const dataFilePath = path.join(userDataPath, 'notes.json');
+
+// ──────────── Config & Markdown Notes ────────────
+const configFilePath = path.join(userDataPath, 'config.json');
+const defaultMdFolder = path.join(userDataPath, 'markdown-notes');
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(configFilePath)) {
+      return JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Failed to load config:', e);
+  }
+  return {};
+}
+
+function saveConfig(config) {
+  try {
+    fs.writeFileSync(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
+    return true;
+  } catch (e) {
+    console.error('Failed to save config:', e);
+    return false;
+  }
+}
+
+function getMdNotesFolder() {
+  const config = loadConfig();
+  return config.mdNotesFolder || defaultMdFolder;
+}
+
+function ensureMdFolder(folderPath) {
+  if (!fs.existsSync(folderPath)) {
+    fs.mkdirSync(folderPath, { recursive: true });
+  }
+}
 
 // ──────────── Single Instance Lock ────────────
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 }
+
+// ──────────── Custom Protocol for Images ────────────
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'md-notes', privileges: { standard: true, secure: true } }
+]);
 
 // ──────────── Auto-launch Helpers ────────────
 const TASK_NAME = 'StickyNoteBoardAutoStart';
@@ -162,6 +205,52 @@ function showMainWindow() {
   }
 }
 
+// ──────────── Markdown Editor Window ────────────
+
+function createMdEditorWindow() {
+  if (mdEditorWindow) {
+    mdEditorWindow.show();
+    mdEditorWindow.focus();
+    return;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const { width: screenW, height: screenH } = display.workAreaSize;
+
+  mdEditorWindow = new BrowserWindow({
+    width: 680,
+    height: 720,
+    minWidth: 420,
+    minHeight: 360,
+    x: Math.round(screenW / 2 - 340),
+    y: Math.round(screenH / 2 - 360),
+    frame: false,
+    backgroundColor: '#FFF8F0',
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  mdEditorWindow.loadFile(path.join(__dirname, 'md-editor.html'));
+
+  mdEditorWindow.on('closed', () => {
+    mdEditorWindow = null;
+  });
+}
+
+function openMdEditorAndCreateNote() {
+  createMdEditorWindow();
+  // Wait for editor to fully load, then send a create-note signal
+  if (mdEditorWindow) {
+    mdEditorWindow.webContents.once('did-finish-load', () => {
+      mdEditorWindow.webContents.send('md-editor:auto-create');
+    });
+  }
+}
+
 // ──────────── Tray ────────────
 
 function createTray() {
@@ -228,6 +317,10 @@ function refreshTrayMenu() {
           mainWindow.focus();
         }
       },
+    },
+    {
+      label: '📝 Markdown 笔记',
+      click: () => createMdEditorWindow(),
     },
     { type: 'separator' },
     {
@@ -334,6 +427,14 @@ ipcMain.on('widget:context-menu', () => {
       label: '📌 显示看板',
       click: () => showMainWindow(),
     },
+    {
+      label: '📝 新建 Markdown 笔记',
+      click: () => openMdEditorAndCreateNote(),
+    },
+    {
+      label: '📂 打开 Markdown 编辑器',
+      click: () => createMdEditorWindow(),
+    },
     { type: 'separator' },
     {
       label: '关闭挂件',
@@ -375,6 +476,181 @@ ipcMain.handle('notes:save', (event, data) => {
     console.error('Failed to save notes:', e);
     return false;
   }
+});
+
+// ──── Widget Markdown quick-create ────
+ipcMain.on('widget:md-new', () => {
+  createMdEditorWindow();
+});
+
+// ──────────── Markdown Notes IPC ────────────
+
+// List all markdown notes
+ipcMain.handle('md:list', () => {
+  const folder = getMdNotesFolder();
+  ensureMdFolder(folder);
+  try {
+    const files = fs.readdirSync(folder).filter(f => f.endsWith('.md'));
+    const notes = files.map(fileName => {
+      const filePath = path.join(folder, fileName);
+      const stat = fs.statSync(filePath);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      // Extract title from first line if it's a heading
+      const firstLine = content.split('\n')[0] || '';
+      const title = firstLine.replace(/^#+\s*/, '').trim() || fileName.replace('.md', '');
+      return {
+        id: fileName.replace('.md', ''),
+        title,
+        fileName,
+        createdAt: stat.birthtimeMs,
+        updatedAt: stat.mtimeMs,
+      };
+    });
+    return notes.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch (e) {
+    console.error('Failed to list markdown notes:', e);
+    return [];
+  }
+});
+
+// Create a new markdown note
+ipcMain.handle('md:create', (event, initialContent) => {
+  const folder = getMdNotesFolder();
+  ensureMdFolder(folder);
+  const timestamp = Date.now();
+  const id = `note-${timestamp}`;
+  const fileName = `${id}.md`;
+  const filePath = path.join(folder, fileName);
+  const content = initialContent || '';
+  try {
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return {
+      id,
+      title: '无标题',
+      fileName,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  } catch (e) {
+    console.error('Failed to create markdown note:', e);
+    return null;
+  }
+});
+
+// Read a markdown note
+ipcMain.handle('md:read', (event, noteId) => {
+  const folder = getMdNotesFolder();
+  const filePath = path.join(folder, `${noteId}.md`);
+  try {
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf-8');
+    }
+  } catch (e) {
+    console.error('Failed to read markdown note:', e);
+  }
+  return '';
+});
+
+// Save a markdown note
+ipcMain.handle('md:save', (event, noteId, content, title) => {
+  const folder = getMdNotesFolder();
+  const filePath = path.join(folder, `${noteId}.md`);
+  try {
+    // Prepend title as H1 if not already present
+    let finalContent = content;
+    if (title && !content.startsWith('# ')) {
+      finalContent = `# ${title}\n\n${content}`;
+    }
+    fs.writeFileSync(filePath, finalContent, 'utf-8');
+    return true;
+  } catch (e) {
+    console.error('Failed to save markdown note:', e);
+    return false;
+  }
+});
+
+// Delete a markdown note
+ipcMain.handle('md:delete', (event, noteId) => {
+  const folder = getMdNotesFolder();
+  const filePath = path.join(folder, `${noteId}.md`);
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return true;
+    }
+  } catch (e) {
+    console.error('Failed to delete markdown note:', e);
+  }
+  return false;
+});
+
+// Select storage folder
+ipcMain.handle('md:select-folder', async () => {
+  try {
+    const result = await dialog.showOpenDialog({
+      title: '选择 Markdown 笔记存储文件夹',
+      defaultPath: getMdNotesFolder(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      const folder = result.filePaths[0];
+      const config = loadConfig();
+      config.mdNotesFolder = folder;
+      saveConfig(config);
+      return folder;
+    }
+  } catch (e) {
+    console.error('Failed to select folder:', e);
+  }
+  return null;
+});
+
+// Get current storage folder
+ipcMain.handle('md:get-folder', () => {
+  return getMdNotesFolder();
+});
+
+// Save pasted image to disk
+ipcMain.handle('md:save-image', (event, base64Data, ext) => {
+  try {
+    const folder = getMdNotesFolder();
+    const imagesDir = path.join(folder, 'images');
+    ensureMdFolder(imagesDir);
+    const timestamp = Date.now();
+    const fileName = `paste-${timestamp}.${ext || 'png'}`;
+    const filePath = path.join(imagesDir, fileName);
+    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+    return { relativePath: `md-notes://images/${fileName}` };
+  } catch (e) {
+    console.error('Failed to save image:', e);
+    return null;
+  }
+});
+
+// Markdown editor window controls
+ipcMain.handle('md-editor:toggle-always-on-top', () => {
+  if (!mdEditorWindow) return false;
+  const current = mdEditorWindow.isAlwaysOnTop();
+  mdEditorWindow.setAlwaysOnTop(!current);
+  return !current;
+});
+
+ipcMain.on('md-editor:minimize', () => {
+  if (mdEditorWindow) {
+    mdEditorWindow.minimize();
+  }
+});
+
+ipcMain.on('md-editor:close', () => {
+  if (mdEditorWindow) {
+    mdEditorWindow.close();
+  }
+});
+
+// Open markdown editor from main window
+ipcMain.handle('md-editor:open', () => {
+  createMdEditorWindow();
+  return true;
 });
 
 // ──────────── Auto Update ────────────
@@ -444,6 +720,13 @@ ipcMain.handle('update:check', () => {
 // ──────────── App Lifecycle ────────────
 
 app.whenReady().then(() => {
+  // Register custom protocol for serving images from notes folder
+  protocol.registerFileProtocol('md-notes', (request, callback) => {
+    const url = request.url.replace('md-notes://', '');
+    const filePath = path.join(getMdNotesFolder(), decodeURIComponent(url));
+    callback({ path: filePath });
+  });
+
   createWindow();
   createTray();
   initAutoUpdater();

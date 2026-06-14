@@ -16,4 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_, info) => cb(info)),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_, p) => cb(p)),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update:downloaded', (_, info) => cb(info)),
+
+  // Markdown notes
+  openMdEditor: () => ipcRenderer.invoke('md-editor:open'),
 });

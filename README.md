@@ -13,6 +13,7 @@
 - **托盘常驻** — 关闭按钮不会退出应用，而是最小化到系统托盘
 - **开机自启动** — 通过 Windows 任务计划延迟 30 秒静默启动，自动显示桌面挂件，点击挂件弹出看板
 - **自动更新** — 检测到 GitHub 新版本后右下角弹窗通知，一键下载更新
+- **Markdown 笔记编辑器** — 独立小窗口，Typora 风格块级即时渲染（写完即渲染，无需分屏），支持图片粘贴、笔记管理、文件夹选择、窗口置顶、最小化恢复
 
 ## 🏗️ 架构概览
 
@@ -21,19 +22,21 @@
 │                 Electron 主进程               │
 │  electron/main.js                           │
 │  ┌──────────┐ ┌──────────┐ ┌─────────────┐ │
-│  │ 主窗口    │ │ 挂件窗口  │ │ 系统托盘     │ │
-│  │ (React)  │ │ (HTML)   │ │ (Tray Icon) │ │
-│  └────┬─────┘ └────┬─────┘ └─────────────┘ │
-│       │             │                        │
-│  ┌────┴─────────────┴───────────────────┐   │
-│  │           IPC 通信层                   │   │
-│  │  preload.js (contextBridge)          │   │
-│  └──────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────┐   │
-│  │  数据持久化 (notes.json)              │   │
-│  │  自启动管理 (schtasks)                │   │
-│  │  自动更新 (electron-updater)          │   │
-│  └──────────────────────────────────────┘   │
+│  │ 主窗口    │ │ 挂件窗口  │ │ MD编辑器窗口 │ │
+│  │ (React)  │ │ (HTML)   │ │ (HTML)      │ │
+│  └────┬─────┘ └────┬─────┘ └──────┬──────┘ │
+│       │             │              │         │
+│  ┌────┴─────────────┴──────────────┴──────┐ │
+│  │           IPC 通信层                    │ │
+│  │  preload.js (contextBridge)            │ │
+│  └────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────┐ │
+│  │  数据持久化 (notes.json / config.json)  │ │
+│  │  Markdown 笔记 (markdown-notes/)       │ │
+│  │  自启动管理 (schtasks)                  │ │
+│  │  自动更新 (electron-updater)            │ │
+│  │  自定义协议 (md-notes://)               │ │
+│  └────────────────────────────────────────┘ │
 └─────────────────────────────────────────────┘
 ```
 
@@ -44,6 +47,7 @@
 - **@electron/packager** — 本地打包成免安装目录（`npm run pack`，已验证稳定）
 - **electron-builder** — GitHub Actions 发版打包成 NSIS 安装包（`npm run dist/release`）
 - **electron-updater** — 检测 GitHub Releases 新版本并自动下载更新
+- **marked** — Markdown 解析库，用于编辑器中将 Markdown 文本实时渲染为 HTML
 
 > **为什么本地用 @electron/packager 而不是 electron-builder？**
 > 在 Windows 上 electron-builder 打包时会因为文件锁导致 EPERM rename 错误（`win-unpacked.tmp` → `win-unpacked`），即使关闭 Windows Defender 也无法稳定复现。@electron/packager 不经过 .tmp rename 步骤，打包稳定可靠。GitHub Actions 的干净环境没有此问题，所以发版仍用 electron-builder。
@@ -59,6 +63,7 @@ sticky-note-board/
 │   ├── main.js                    # 入口：窗口管理、托盘、IPC、自启动、自动更新
 │   ├── preload.js                 # 安全桥接：通过 contextBridge 暴露 API 给渲染进程
 │   ├── widget.html                # 挂件窗口：独立 HTML，桌面浮标 UI（自包含 CSS+JS）
+│   ├── md-editor.html             # Markdown 编辑器窗口：Typora 风格块级即时渲染（自包含 CSS+JS）
 │
 ├── src/                            # React 渲染进程代码（主窗口 UI）
 │   ├── main.jsx                   # React 入口
@@ -143,6 +148,10 @@ npm run dev
 
 挂件是独立的 `electron/widget.html`，所有 CSS 和 JS 都内联在里面。它是一个透明背景的 80×90px 小窗口，设置了 `alwaysOnTop: true`。
 
+### 改 Markdown 编辑器
+
+编辑器是独立的 `electron/md-editor.html`，所有 CSS 和 JS 都内联。使用 `marked` 库解析 Markdown，采用块级即时渲染模式。主进程中的 `config.json`（`%APPDATA%/sticky-note-board/config.json`）存储笔记文件夹路径等偏好。
+
 ### 加新功能
 
 1. 如果需要跟 Electron 交互（窗口控制、文件读写等）：在 `electron/main.js` 加 IPC handler，在 `preload.js` 暴露 API，然后在 React 组件里通过 `window.electronAPI.xxx()` 调用
@@ -150,7 +159,7 @@ npm run dev
 
 ### 数据怎么存的
 
-笔记数据保存在 `%APPDATA%/sticky-note-board/notes.json`（Windows），由主进程通过 `fs` 读写。每次笔记变更后 300ms 自动保存（防抖）。
+笔记数据保存在 `%APPDATA%/sticky-note-board/notes.json`（Windows），由主进程通过 `fs` 读写。每次笔记变更后 300ms 自动保存（防抖）。Markdown 笔记默认存储在 `%APPDATA%/sticky-note-board/markdown-notes/`，可在编辑器中自定义文件夹路径，偏好保存在 `config.json` 中。
 
 ## 📦 发版流程
 

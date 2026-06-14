@@ -165,6 +165,45 @@
   .widget:hover .tooltip {
     opacity: 1;
   }
+
+  /* ── Markdown quick-create button ── */
+  .md-btn {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: #FF8C69;
+    color: white;
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(255, 140, 105, 0.4);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    opacity: 0;
+    transform: scale(0.6);
+    z-index: 10;
+    line-height: 1;
+  }
+
+  .widget:hover .md-btn {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .md-btn:hover {
+    background: #FF7755;
+    transform: scale(1.15) !important;
+  }
+
+  .md-btn:active {
+    transform: scale(0.95) !important;
+  }
 </style>
 </head>
 <body>
@@ -176,6 +215,7 @@
       <span class="count" id="count"></span>
       <div class="fold"></div>
     </div>
+    <button class="md-btn" id="mdBtn" title="新建 Markdown 笔记">📝</button>
     <div class="tooltip">点击打开看板</div>
   </div>
 
@@ -233,6 +273,16 @@
     widget.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       ipcRenderer.send('widget:context-menu');
+    });
+
+    // ── Markdown quick-create button ──
+    const mdBtn = document.getElementById('mdBtn');
+    mdBtn.addEventListener('mousedown', (e) => {
+      e.stopPropagation(); // prevent widget drag
+    });
+    mdBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      ipcRenderer.send('widget:md-new');
     });
   </script>
 </body>

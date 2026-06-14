@@ -75,6 +75,13 @@ export default function Toolbar({
 
       <div className="toolbar-right">
         <button
+          className="toolbar-btn"
+          onClick={() => window.electronAPI?.openMdEditor?.()}
+          title="打开 Markdown 笔记编辑器"
+        >
+          📝
+        </button>
+        <button
           className={`toolbar-btn widget-btn ${widgetMode ? 'active' : ''}`}
           onClick={onToggleWidgetMode}
           title={widgetMode ? '关闭挂件模式' : '开启挂件模式（缩小为桌面浮标，点击弹出看板）'}

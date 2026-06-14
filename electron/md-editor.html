@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-warm: #FFF8F0;
+    --bg-sidebar: #FFF3E6;
+    --bg-toolbar: #FFECD2;
+    --text-primary: #5D4E37;
+    --text-secondary: #A0896E;
+    --text-light: #C4AD94;
+    --accent: #FF8C69;
+    --accent-light: #FFB8A0;
+    --border-warm: #F0D9C0;
+    --shadow-soft: rgba(180, 140, 100, 0.12);
+    --shadow-medium: rgba(180, 140, 100, 0.22);
+    --danger: #FF6B6B;
+  }
+
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: var(--bg-warm); color: var(--text-primary);
+  }
+
+  /* ── Title Bar ── */
+  .title-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 36px;
+    background: linear-gradient(135deg, var(--bg-toolbar) 0%, #FFE0C0 100%);
+    border-bottom: 1px solid var(--border-warm);
+    padding: 0 12px; -webkit-app-region: drag; user-select: none; flex-shrink: 0;
+  }
+  .title-bar-left { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; }
+  .title-bar-right { display: flex; align-items: center; gap: 4px; -webkit-app-region: no-drag; }
+  .title-btn {
+    width: 26px; height: 26px; border: none;
+    background: rgba(255,255,255,0.45); border-radius: 8px;
+    cursor: pointer; font-size: 0.8rem; color: var(--text-secondary);
+    display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+  }
+  .title-btn:hover { background: rgba(255,255,255,0.8); color: var(--text-primary); transform: scale(1.05); }
+  .title-btn.active { background: var(--accent-light); color: white; }
+  .title-btn-close:hover { background: var(--danger) !important; color: white !important; }
+
+  /* ── Layout ── */
+  .container { display: flex; height: calc(100vh - 36px); }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 200px; min-width: 200px; background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-warm);
+    display: flex; flex-direction: column; transition: width 0.3s, min-width 0.3s;
+  }
+  .sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; border-right: none; }
+  .sidebar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-bottom: 1px solid rgba(240,217,192,0.5);
+  }
+  .sidebar-title { font-size: 0.85rem; font-weight: 600; }
+  .new-note-btn {
+    width: 28px; height: 28px; border: none; background: var(--accent); color: white;
+    border-radius: 8px; cursor: pointer; font-size: 1.1rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; transition: all 0.2s; line-height: 1;
+  }
+  .new-note-btn:hover { background: #FF7755; transform: scale(1.08); }
+  .note-list { flex: 1; overflow-y: auto; padding: 6px; }
+  .note-list::-webkit-scrollbar { width: 4px; }
+  .note-list::-webkit-scrollbar-thumb { background: rgba(180,140,100,0.2); border-radius: 2px; }
+  .note-item {
+    padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; margin-bottom: 3px; position: relative; animation: fadeIn 0.2s ease;
+  }
+  .note-item:hover { background: rgba(255,255,255,0.6); }
+  .note-item.active { background: rgba(255,140,105,0.15); border-left: 3px solid var(--accent); }
+  .note-item-title {
+    font-size: 0.82rem; font-weight: 500; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; padding-right: 18px;
+  }
+  .note-item-date { font-size: 0.68rem; color: var(--text-light); margin-top: 2px; }
+  .note-item-delete {
+    position: absolute; top: 8px; right: 6px;
+    width: 20px; height: 20px; border: none; background: transparent;
+    border-radius: 5px; cursor: pointer; font-size: 0.65rem; color: var(--text-light);
+    opacity: 0; transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+  }
+  .note-item:hover .note-item-delete { opacity: 1; }
+  .note-item-delete:hover { background: var(--danger) !important; color: white !important; }
+  .sidebar-footer { padding: 8px 12px; border-top: 1px solid rgba(240,217,192,0.5); display: flex; gap: 4px; }
+  .sidebar-footer-btn {
+    flex: 1; border: none; background: rgba(255,255,255,0.4);
+    padding: 6px 4px; border-radius: 8px; cursor: pointer;
+    font-size: 0.72rem; color: var(--text-secondary); transition: all 0.2s;
+    font-family: inherit; text-align: center;
+  }
+  .sidebar-footer-btn:hover { background: rgba(255,255,255,0.8); color: var(--text-primary); }
+  .sidebar-footer-btn.has-folder { color: #5B8C5A; }
+
+  /* ── Main ── */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  /* ── Toolbar ── */
+  .editor-toolbar {
+    display: flex; align-items: center; padding: 6px 12px; gap: 6px;
+    border-bottom: 1px solid rgba(240,217,192,0.4); background: rgba(255,255,255,0.3);
+  }
+  .editor-toolbar-btn {
+    border: none; background: rgba(255,255,255,0.5);
+    padding: 4px 10px; border-radius: 6px; cursor: pointer;
+    font-size: 0.78rem; color: var(--text-secondary); transition: all 0.2s; font-family: inherit;
+  }
+  .editor-toolbar-btn:hover { background: rgba(255,255,255,0.8); color: var(--text-primary); }
+  .editor-toolbar-sep { width: 1px; height: 16px; background: var(--border-warm); }
+  .save-status { margin-left: auto; font-size: 0.72rem; color: var(--text-light); }
+  .save-status.saved { color: #5B8C5A; }
+
+  /* ── Title Input ── */
+  .title-input {
+    width: 100%; border: none; background: transparent;
+    padding: 16px 24px 4px; font-size: 1.4rem; font-weight: 700;
+    color: var(--text-primary); font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; outline: none;
+  }
+  .title-input::placeholder { color: var(--text-light); }
+
+  /* ── Editor Body ── */
+  .editor-body { flex: 1; overflow-y: auto; padding: 8px 24px 60px; min-height: 0; }
+  .editor-body::-webkit-scrollbar { width: 5px; }
+  .editor-body::-webkit-scrollbar-thumb { background: rgba(180,140,100,0.2); border-radius: 3px; }
+
+  /* ── Empty State ── */
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-light); gap: 10px; padding: 40px;
+  }
+  .empty-state-icon { font-size: 3rem; opacity: 0.4; }
+  .empty-state-text { font-size: 0.9rem; text-align: center; line-height: 1.6; }
+  .empty-state-btn {
+    margin-top: 8px; border: none; background: var(--accent); color: white;
+    padding: 8px 20px; border-radius: 10px; cursor: pointer;
+    font-size: 0.88rem; font-family: inherit; font-weight: 600; transition: all 0.2s;
+  }
+  .empty-state-btn:hover { background: #FF7755; transform: scale(1.03); }
+
+  /* ═══════════════════════════════════════════
+     Block-based Editor (Typora-like)
+     ═══════════════════════════════════════════ */
+
+  .md-block {
+    position: relative; border-radius: 4px;
+    transition: background 0.15s; min-height: 1.5em;
+  }
+  .md-block-rendered {
+    cursor: text; padding: 2px 4px; border-radius: 4px;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .md-block-rendered:hover { background: rgba(240, 217, 192, 0.18); }
+  .md-block-editing {
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 6px; padding: 2px 0;
+  }
+  .block-textarea {
+    width: 100%; border: none; background: transparent;
+    padding: 6px 8px; font-size: 0.92rem; line-height: 1.75;
+    color: var(--text-primary);
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Microsoft YaHei', monospace;
+    resize: none; outline: none; tab-size: 2; overflow: hidden;
+  }
+  .block-textarea::placeholder { color: var(--text-light); }
+
+  .new-block-area {
+    min-height: 40px; display: flex; align-items: center;
+    padding: 4px 8px; cursor: text; color: var(--text-light);
+    font-size: 0.88rem; opacity: 0.4; transition: opacity 0.2s;
+  }
+  .new-block-area:hover { opacity: 0.7; }
+
+  /* ═══════════════════════════════════════════
+     Rendered Markdown
+     ═══════════════════════════════════════════ */
+
+  .md-rendered {
+    font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    font-size: 0.92rem; line-height: 1.75; color: var(--text-primary); word-wrap: break-word;
+  }
+  .md-rendered h1 { font-size: 1.5rem; font-weight: 700; margin: 4px 0; padding-bottom: 6px; border-bottom: 2px solid var(--border-warm); }
+  .md-rendered h2 { font-size: 1.25rem; font-weight: 600; margin: 4px 0; color: var(--accent); }
+  .md-rendered h3 { font-size: 1.08rem; font-weight: 600; margin: 4px 0; }
+  .md-rendered h4, .md-rendered h5, .md-rendered h6 { font-size: 1rem; font-weight: 600; margin: 4px 0; }
+  .md-rendered p { margin: 2px 0; }
+  .md-rendered ul, .md-rendered ol { margin: 2px 0; padding-left: 24px; }
+  .md-rendered li { margin: 2px 0; }
+  .md-rendered code {
+    background: rgba(240,217,192,0.4); padding: 2px 6px; border-radius: 4px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85em; color: #C0392B;
+  }
+  .md-rendered pre {
+    background: #2D2D2D; color: #F8F8F2;
+    padding: 14px 16px; border-radius: 10px;
+    overflow-x: auto; margin: 4px 0; font-size: 0.85rem; line-height: 1.6;
+  }
+  .md-rendered pre code { background: transparent; color: inherit; padding: 0; font-size: inherit; }
+  .md-rendered blockquote {
+    border-left: 3px solid var(--accent-light); padding: 6px 14px; margin: 4px 0;
+    background: rgba(255,140,105,0.06); border-radius: 0 8px 8px 0; color: var(--text-secondary);
+  }
+  .md-rendered a { color: var(--accent); text-decoration: none; }
+  .md-rendered a:hover { text-decoration: underline; }
+  .md-rendered table { border-collapse: collapse; width: 100%; margin: 4px 0; }
+  .md-rendered th, .md-rendered td { border: 1px solid var(--border-warm); padding: 8px 12px; text-align: left; }
+  .md-rendered th { background: rgba(255,236,210,0.5); font-weight: 600; }
+  .md-rendered img { max-width: 100%; border-radius: 8px; margin: 4px 0; }
+  .md-rendered hr { border: none; height: 1px; background: var(--border-warm); margin: 12px 0; }
+  .md-rendered input[type="checkbox"] { margin-right: 6px; accent-color: var(--accent); }
+  .md-rendered strong { font-weight: 700; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .toast {
+    position: fixed; bottom: 16px; right: 16px;
+    background: rgba(255,255,255,0.95); backdrop-filter: blur(8px);
+    border: 1px solid var(--border-warm); border-radius: 12px;
+    padding: 10px 16px; box-shadow: 0 4px 20px var(--shadow-medium);
+    font-size: 0.82rem; color: var(--text-primary); z-index: 999;
+    animation: toastIn 0.3s ease; transition: opacity 0.3s;
+  }
+  .toast.hide { opacity: 0; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+  <div class="title-bar">
+    <div class="title-bar-left"><span>📝</span><span>Markdown 笔记</span></div>
+    <div class="title-bar-right">
+      <button class="title-btn" id="toggleSidebarBtn" title="切换侧栏">☰</button>
+      <button class="title-btn active" id="alwaysOnTopBtn" title="窗口置顶">📍</button>
+      <button class="title-btn" id="minimizeBtn" title="最小化">─</button>
+      <button class="title-btn title-btn-close" id="closeBtn" title="关闭">✕</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">笔记列表</span>
+        <button class="new-note-btn" id="newNoteBtn" title="新建笔记">+</button>
+      </div>
+      <div class="note-list" id="noteList"></div>
+      <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="selectFolderBtn">📁 选择文件夹</button>
+      </div>
+    </div>
+
+    <div class="main" id="mainArea">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-state-icon">📝</div>
+        <div class="empty-state-text">还没有选择笔记<br>创建一篇新的 Markdown 笔记吧</div>
+        <button class="empty-state-btn" id="emptyNewBtn">+ 新建笔记</button>
+      </div>
+
+      <div id="editorArea" style="display:none; flex-direction:column; flex:1; min-height:0;">
+        <div class="editor-toolbar">
+          <button class="editor-toolbar-btn" data-action="bold" title="加粗 Ctrl+B"><b>B</b></button>
+          <button class="editor-toolbar-btn" data-action="italic" title="斜体 Ctrl+I"><i>I</i></button>
+          <button class="editor-toolbar-btn" data-action="heading" title="标题">H</button>
+          <button class="editor-toolbar-btn" data-action="link" title="链接">🔗</button>
+          <button class="editor-toolbar-btn" data-action="code" title="代码块">⟨/⟩</button>
+          <button class="editor-toolbar-btn" data-action="list" title="列表">☰</button>
+          <button class="editor-toolbar-btn" data-action="check" title="任务列表">☑</button>
+          <div class="editor-toolbar-sep"></div>
+          <button class="editor-toolbar-btn" data-action="image" title="插入图片">🖼</button>
+          <span class="save-status" id="saveStatus">已保存</span>
+        </div>
+        <input type="text" class="title-input" id="titleInput" placeholder="笔记标题..." />
+        <div class="editor-body" id="editorBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    const { marked } = require('marked');
+    const path = require('path');
+
+    marked.setOptions({ breaks: true, gfm: true });
+
+    // ── State ──
+    let notes = [];
+    let currentNoteId = null;
+    let blocks = [];            // [{source: string}]
+    let editingBlockIdx = -1;
+    let saveTimer = null;
+    let isAlwaysOnTop = true;
+    let sidebarVisible = true;
+    let pendingFocusIdx = -1;
+
+    // ── DOM ──
+    const $noteList = document.getElementById('noteList');
+    const $emptyState = document.getElementById('emptyState');
+    const $editorArea = document.getElementById('editorArea');
+    const $titleInput = document.getElementById('titleInput');
+    const $editorBody = document.getElementById('editorBody');
+    const $saveStatus = document.getElementById('saveStatus');
+    const $sidebar = document.getElementById('sidebar');
+
+    // ═══════════════════════════════════════════
+    //  Block Parsing
+    // ═══════════════════════════════════════════
+
+    function parseBlocks(source) {
+      if (!source || !source.trim()) return [{ source: '' }];
+
+      // Protect fenced code blocks from splitting
+      const codeBlocks = [];
+      const PH = '\x00CB';
+      let tmp = source.replace(/```[\s\S]*?```/g, m => {
+        const i = codeBlocks.length;
+        codeBlocks.push(m);
+        return PH + i + '\x00';
+      });
+
+      const parts = tmp.split(/\n{2,}/);
+      const result = [];
+      for (const p of parts) {
+        const restored = p.replace(/\x00CB(\d+)\x00/g, (_, i) => codeBlocks[+i]);
+        result.push({ source: restored });
+      }
+      return result.length ? result : [{ source: '' }];
+    }
+
+    function blocksToSource() {
+      return blocks.map(b => b.source).join('\n\n');
+    }
+
+    function renderBlockHtml(source) {
+      if (!source || !source.trim()) return '<br>';
+      try { return marked.parse(source) || '<br>'; }
+      catch { return escapeHtml(source); }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Block Rendering
+    // ═══════════════════════════════════════════
+
+    function renderAllBlocks() {
+      $editorBody.innerHTML = '';
+
+      blocks.forEach((block, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'md-block';
+        wrap.dataset.index = idx;
+
+        if (idx === editingBlockIdx) {
+          wrap.classList.add('md-block-editing');
+          const ta = document.createElement('textarea');
+          ta.className = 'block-textarea';
+          ta.value = block.source;
+          ta.placeholder = '写点什么... (Enter 新段落, Shift+Enter 换行)';
+
+          const resize = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+          ta.addEventListener('input', () => { blocks[idx].source = ta.value; resize(); scheduleAutoSave(); });
+          ta.addEventListener('keydown', e => handleBlockKey(e, idx, ta));
+          ta.addEventListener('paste', e => handlePaste(e, idx, ta));
+          ta.addEventListener('blur', () => {
+            setTimeout(() => { if (editingBlockIdx === idx) { editingBlockIdx = -1; renderAllBlocks(); } }, 130);
+          });
+
+          wrap.appendChild(ta);
+          requestAnimationFrame(() => {
+            ta.focus(); resize();
+            if (pendingFocusIdx >= 0) {
+              const p = pendingFocusIdx; pendingFocusIdx = -1;
+              try { ta.setSelectionRange(p, p); } catch {}
+            } else {
+              const l = ta.value.length;
+              try { ta.setSelectionRange(l, l); } catch {}
+            }
+          });
+        } else {
+          wrap.classList.add('md-block-rendered');
+          const div = document.createElement('div');
+          div.className = 'md-rendered';
+          div.innerHTML = renderBlockHtml(block.source);
+          div.addEventListener('click', () => { editingBlockIdx = idx; renderAllBlocks(); });
+          wrap.appendChild(div);
+        }
+        $editorBody.appendChild(wrap);
+      });
+
+      // Bottom "continue writing" area
+      const area = document.createElement('div');
+      area.className = 'new-block-area';
+      area.textContent = '点击此处继续写作...';
+      area.addEventListener('click', () => {
+        blocks.push({ source: '' });
+        editingBlockIdx = blocks.length - 1;
+        renderAllBlocks();
+      });
+      $editorBody.appendChild(area);
+    }
+
+    // ═══════════════════════════════════════════
+    //  Block Key Handling
+    // ═══════════════════════════════════════════
+
+    function handleBlockKey(e, idx, ta) {
+      // Enter → split / new block
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const pos = ta.selectionStart;
+        const before = ta.value.substring(0, pos);
+        const after = ta.value.substring(pos);
+        if (after.trim() === '' && before.trim() !== '') {
+          blocks[idx].source = before.trimEnd();
+          blocks.splice(idx + 1, 0, { source: '' });
+          editingBlockIdx = idx + 1;
+          pendingFocusIdx = 0;
+        } else {
+          blocks[idx].source = before;
+          blocks.splice(idx + 1, 0, { source: after.trimStart() });
+          editingBlockIdx = idx + 1;
+          pendingFocusIdx = 0;
+        }
+        renderAllBlocks(); scheduleAutoSave(); return;
+      }
+      // Backspace at start → merge prev
+      if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0 && idx > 0) {
+        e.preventDefault();
+        const prev = blocks[idx - 1].source;
+        blocks[idx - 1].source = prev + '\n' + ta.value;
+        blocks.splice(idx, 1);
+        editingBlockIdx = idx - 1;
+        pendingFocusIdx = prev.length + 1;
+        renderAllBlocks(); scheduleAutoSave(); return;
+      }
+      // Tab
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = ta.selectionStart, en = ta.selectionEnd;
+        ta.value = ta.value.substring(0, s) + '  ' + ta.value.substring(en);
+        ta.selectionStart = ta.selectionEnd = s + 2;
+        blocks[idx].source = ta.value; scheduleAutoSave(); return;
+      }
+      // Escape
+      if (e.key === 'Escape') { editingBlockIdx = -1; renderAllBlocks(); return; }
+      // Ctrl+S
+      if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveCurrentNote(); return; }
+      // Ctrl+B
+      if (e.ctrlKey && e.key === 'b') { e.preventDefault(); wrapSel(ta, idx, '**', '**', '粗体文字'); return; }
+      // Ctrl+I
+      if (e.ctrlKey && e.key === 'i') { e.preventDefault(); wrapSel(ta, idx, '*', '*', '斜体文字'); return; }
+      // ArrowUp at start → prev block
+      if (e.key === 'ArrowUp' && ta.selectionStart === 0 && idx > 0) {
+        e.preventDefault(); editingBlockIdx = idx - 1;
+        pendingFocusIdx = blocks[idx - 1].source.length; renderAllBlocks(); return;
+      }
+      // ArrowDown at end → next block
+      if (e.key === 'ArrowDown' && ta.selectionEnd === ta.value.length && idx < blocks.length - 1) {
+        e.preventDefault(); editingBlockIdx = idx + 1;
+        pendingFocusIdx = 0; renderAllBlocks(); return;
+      }
+    }
+
+    function wrapSel(ta, idx, bef, aft, ph) {
+      const s = ta.selectionStart, e = ta.selectionEnd;
+      const sel = ta.value.substring(s, e) || ph;
+      const ins = bef + sel + aft;
+      ta.value = ta.value.substring(0, s) + ins + ta.value.substring(e);
+      ta.selectionStart = s + bef.length;
+      ta.selectionEnd = s + bef.length + sel.length;
+      blocks[idx].source = ta.value; ta.focus(); scheduleAutoSave();
+    }
+
+    // ═══════════════════════════════════════════
+    //  Image Paste
+    // ═══════════════════════════════════════════
+
+    function handlePaste(e, idx, ta) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const blob = item.getAsFile();
+          if (!blob) return;
+          const reader = new FileReader();
+          reader.onload = async () => {
+            const base64 = reader.result.split(',')[1];
+            const ext = item.type.split('/')[1] || 'png';
+            const result = await ipcRenderer.invoke('md:save-image', base64, ext);
+            if (result) {
+              const imgMd = `![粘贴的图片](${result.relativePath})`;
+              const p = ta.selectionStart;
+              ta.value = ta.value.substring(0, p) + imgMd + ta.value.substring(ta.selectionEnd);
+              ta.selectionStart = ta.selectionEnd = p + imgMd.length;
+              blocks[idx].source = ta.value;
+              scheduleAutoSave();
+              showToast('图片已保存');
+            } else { showToast('图片保存失败'); }
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Note CRUD
+    // ═══════════════════════════════════════════
+
+    async function init() {
+      await loadNoteList(); setupEventListeners();
+      if (notes.length > 0) selectNote(notes[0].id);
+    }
+
+    async function loadNoteList() { notes = await ipcRenderer.invoke('md:list'); renderNoteList(); }
+
+    function renderNoteList() {
+      $noteList.innerHTML = '';
+      if (!notes.length) {
+        $noteList.innerHTML = '<div style="text-align:center;color:var(--text-light);font-size:0.78rem;padding:20px 8px;opacity:0.6;">暂无笔记<br>点击 + 创建</div>';
+        return;
+      }
+      const sorted = [...notes].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      for (const note of sorted) {
+        const d = document.createElement('div');
+        d.className = 'note-item' + (note.id === currentNoteId ? ' active' : '');
+        d.innerHTML = `<div class="note-item-title">${escapeHtml(note.title || '无标题')}</div>
+          <div class="note-item-date">${formatDate(note.updatedAt || note.createdAt)}</div>
+          <button class="note-item-delete" title="删除">✕</button>`;
+        d.addEventListener('click', e => { if (e.target.closest('.note-item-delete')) return; selectNote(note.id); });
+        d.querySelector('.note-item-delete').addEventListener('click', e => { e.stopPropagation(); deleteNote(note.id); });
+        $noteList.appendChild(d);
+      }
+    }
+
+    async function selectNote(noteId) {
+      if (currentNoteId === noteId) return;
+      if (currentNoteId) await saveCurrentNote();
+      currentNoteId = noteId;
+      const note = notes.find(n => n.id === noteId);
+      if (!note) return;
+      const content = await ipcRenderer.invoke('md:read', noteId);
+      $titleInput.value = note.title || '';
+      blocks = parseBlocks(content || '');
+      editingBlockIdx = -1;
+      $emptyState.style.display = 'none';
+      $editorArea.style.display = 'flex';
+      renderAllBlocks(); renderNoteList();
+    }
+
+    async function createNote() {
+      const r = await ipcRenderer.invoke('md:create', '');
+      if (r) { await loadNoteList(); selectNote(r.id); $titleInput.focus(); showToast('新笔记已创建'); }
+    }
+
+    async function deleteNote(noteId) {
+      if (!await ipcRenderer.invoke('md:delete', noteId)) return;
+      if (currentNoteId === noteId) {
+        currentNoteId = null;
+        $editorArea.style.display = 'none'; $emptyState.style.display = 'flex';
+        const rem = notes.filter(n => n.id !== noteId);
+        if (rem.length) { await loadNoteList(); selectNote(rem[0].id); } else { await loadNoteList(); }
+      } else { await loadNoteList(); }
+      showToast('笔记已删除');
+    }
+
+    async function saveCurrentNote() {
+      if (!currentNoteId) return;
+      const ok = await ipcRenderer.invoke('md:save', currentNoteId, blocksToSource(), $titleInput.value);
+      if (ok) { $saveStatus.textContent = '已保存'; $saveStatus.className = 'save-status saved'; await loadNoteList(); }
+    }
+
+    function scheduleAutoSave() {
+      $saveStatus.textContent = '编辑中...'; $saveStatus.className = 'save-status';
+      clearTimeout(saveTimer); saveTimer = setTimeout(saveCurrentNote, 600);
+    }
+
+    // ═══════════════════════════════════════════
+    //  Toolbar
+    // ═══════════════════════════════════════════
+
+    function insertFormatting(action) {
+      const ta = $editorBody.querySelector('.block-textarea');
+      if (!ta || editingBlockIdx < 0) {
+        const tpls = { bold:'**粗体文字**', italic:'*斜体文字*', heading:'## 标题',
+          link:'[链接文字](url)', code:'```\n代码\n```', list:'- 列表项',
+          check:'- [ ] 待办事项', image:'![图片描述](图片路径)' };
+        blocks.push({ source: tpls[action] || '' });
+        editingBlockIdx = blocks.length - 1; renderAllBlocks(); scheduleAutoSave(); return;
+      }
+      const idx = editingBlockIdx;
+      const s = ta.selectionStart, e = ta.selectionEnd, sel = ta.value.substring(s, e);
+      let ins = '', co = 0;
+      switch (action) {
+        case 'bold': ins=`**${sel||'粗体文字'}**`; co=sel?ins.length:2; break;
+        case 'italic': ins=`*${sel||'斜体文字'}*`; co=sel?ins.length:1; break;
+        case 'heading': ins=`## ${sel||'标题'}`; co=ins.length; break;
+        case 'link': ins=`[${sel||'链接文字'}](url)`; co=sel?ins.length-4:1; break;
+        case 'code': ins=sel.includes('\n')?`\`\`\`\n${sel||'代码'}\n\`\`\``:`\`${sel||'代码'}\``; co=sel?ins.length:1; break;
+        case 'list': ins=`- ${sel||'列表项'}`; co=ins.length; break;
+        case 'check': ins=`- [ ] ${sel||'待办事项'}`; co=ins.length; break;
+        case 'image': ins=`![${sel||'图片描述'}](图片路径)`; co=ins.length; break;
+      }
+      ta.value = ta.value.substring(0, s) + ins + ta.value.substring(e);
+      ta.selectionStart = ta.selectionEnd = s + co;
+      blocks[idx].source = ta.value; ta.focus();
+      ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px';
+      scheduleAutoSave();
+    }
+
+    // ═══════════════════════════════════════════
+    //  Events
+    // ═══════════════════════════════════════════
+
+    function setupEventListeners() {
+      $titleInput.addEventListener('input', () => scheduleAutoSave());
+      document.getElementById('newNoteBtn').addEventListener('click', createNote);
+      document.getElementById('emptyNewBtn').addEventListener('click', createNote);
+      document.getElementById('closeBtn').addEventListener('click', () => ipcRenderer.send('md-editor:close'));
+      document.getElementById('minimizeBtn').addEventListener('click', () => ipcRenderer.send('md-editor:minimize'));
+
+      const aotBtn = document.getElementById('alwaysOnTopBtn');
+      aotBtn.addEventListener('click', async () => {
+        isAlwaysOnTop = await ipcRenderer.invoke('md-editor:toggle-always-on-top');
+        aotBtn.classList.toggle('active', isAlwaysOnTop);
+      });
+
+      document.getElementById('toggleSidebarBtn').addEventListener('click', () => {
+        sidebarVisible = !sidebarVisible;
+        $sidebar.classList.toggle('collapsed', !sidebarVisible);
+      });
+
+      document.getElementById('selectFolderBtn').addEventListener('click', async () => {
+        const folder = await ipcRenderer.invoke('md:select-folder');
+        if (folder) {
+          const btn = document.getElementById('selectFolderBtn');
+          btn.classList.add('has-folder'); btn.textContent = '📁 ' + path.basename(folder);
+          await loadNoteList();
+          if (currentNoteId) {
+            const note = notes.find(n => n.id === currentNoteId);
+            if (note) {
+              const c = await ipcRenderer.invoke('md:read', currentNoteId);
+              blocks = parseBlocks(c || ''); editingBlockIdx = -1; renderAllBlocks();
+            } else { currentNoteId = null; $editorArea.style.display = 'none'; $emptyState.style.display = 'flex'; }
+          }
+          showToast('存储文件夹已更新');
+        }
+      });
+
+      document.querySelectorAll('.editor-toolbar-btn[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => insertFormatting(btn.dataset.action));
+      });
+
+      $editorBody.addEventListener('click', e => {
+        if (e.target === $editorBody) {
+          if (!blocks.length || (blocks.length === 1 && !blocks[0].source.trim())) {
+            editingBlockIdx = 0;
+          } else { blocks.push({ source: '' }); editingBlockIdx = blocks.length - 1; pendingFocusIdx = 0; }
+          renderAllBlocks();
+        }
+      });
+
+      ipcRenderer.invoke('md:get-folder').then(folder => {
+        if (folder) {
+          const btn = document.getElementById('selectFolderBtn');
+          btn.classList.add('has-folder'); btn.textContent = '📁 ' + path.basename(folder);
+        }
+      });
+    }
+
+    // ── Helpers ──
+    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function formatDate(ts) {
+      if (!ts) return '';
+      const diff = Date.now() - ts;
+      if (diff < 60000) return '刚刚';
+      if (diff < 3600000) return Math.floor(diff/60000) + ' 分钟前';
+      if (diff < 86400000) return Math.floor(diff/3600000) + ' 小时前';
+      if (diff < 604800000) return Math.floor(diff/86400000) + ' 天前';
+      const d = new Date(ts); return `${d.getMonth()+1}/${d.getDate()}`;
+    }
+    function showToast(msg) {
+      const old = document.querySelector('.toast'); if (old) old.remove();
+      const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.classList.add('hide'), 2000);
+      setTimeout(() => t.remove(), 2500);
+    }
+
+    init();
+    ipcRenderer.on('md-editor:auto-create', () => createNote());
+  </script>
+</body>
+</html>

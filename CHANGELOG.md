@@ -6,9 +6,33 @@
 
 ## 未发布 (Unreleased)
 
-### 改进
+（暂无）
 
-- 开机自启动（`--silent` 模式）现在会自动显示桌面挂件，用户点击挂件即可弹出看板，不再只藏在系统托盘里
+---
+
+## v1.1.0 — 2026-06-14 Markdown 笔记编辑器
+
+### 新功能
+
+- **Markdown 笔记编辑器**：新增独立窗口 `md-editor.html`，支持 Typora 风格的块级即时渲染——写完一个段落/代码块后移开光标即刻渲染为 HTML，点击渲染块回到编辑状态，无需分屏或预览面板
+- **图片粘贴**：在编辑器中 Ctrl+V 可直接粘贴剪贴板图片，自动保存到笔记目录的 `images/` 子文件夹，插入 Markdown 图片语法
+- **自定义协议 `md-notes://`**：通过 `protocol.registerSchemesAsPrivileged` + `protocol.registerFileProtocol` 注册，使编辑器中的图片路径能正确解析到笔记存储目录
+- **笔记管理**：侧边栏笔记列表，支持新建、重命名、删除；工具栏提供加粗、斜体、标题、列表、代码块、链接、图片快捷按钮
+- **文件夹选择**：可在设置中自定义笔记存储路径，默认存储在 `%APPDATA%/sticky-note-board/markdown-notes/`
+- **挂件快速入口**：桌面挂件新增 📝 按钮，点击即可打开 Markdown 编辑器；若编辑器已打开则恢复窗口而非重复创建
+- **编辑器最小化**：标题栏新增最小化按钮（─），最小化后可通过挂件按钮恢复
+- **窗口置顶切换**：编辑器支持一键切换始终置顶（📍 按钮）
+- **偏好持久化**：新增 `config.json` 配置文件，存储笔记文件夹路径等用户偏好
+
+### 技术变更
+
+- 新增依赖：`marked@^12.0.2`（Markdown 解析库）
+- 新增文件：`electron/md-editor.html`（Markdown 编辑器独立窗口）
+- 主进程新增 IPC 通道：`md:list`、`md:create`、`md:read`、`md:save`、`md:delete`、`md:select-folder`、`md:get-folder`、`md:save-image`、`md-editor:open`、`md-editor:minimize`、`md-editor:close`、`md-editor:toggle-always-on-top`
+- `electron/main.js` 新增配置管理（`config.json` 读写）、`createMdEditorWindow()`、自定义协议注册
+- `electron/preload.js` 新增 `openMdEditor` API
+- `electron/widget.html` 新增 📝 按钮和对应点击事件
+- `src/components/Toolbar.jsx` 新增 📝 按钮入口
 
 ---
 
