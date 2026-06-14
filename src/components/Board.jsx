@@ -29,7 +29,7 @@ export default function Board({
   );
 
   const handleDragEnd = useCallback(
-    (id, x, y) => {
+    (id, x, y, right, bottom) => {
       if (viewMode === 'kanban' && boardRef.current) {
         const boardRect = boardRef.current.getBoundingClientRect();
         const relX = x - boardRect.left;
@@ -39,18 +39,17 @@ export default function Board({
         else if (relX > colWidth) column = 'doing';
         onUpdateNote(id, { column });
       } else if (viewMode === 'free' && bucketRef.current) {
-        // Check if note was dropped onto the done bucket
+        // Rect-overlap detection: any part of note overlaps bucket = hit
         const bucketRect = bucketRef.current.getBoundingClientRect();
-        const noteCenterX = x + 90; // approximate note half-width
-        const noteCenterY = y + 80; // approximate note half-height
-        const overBucket =
-          noteCenterX > bucketRect.left &&
-          noteCenterX < bucketRect.right &&
-          noteCenterY > bucketRect.top &&
-          noteCenterY < bucketRect.bottom;
+        const noteRight = right || x + 230;
+        const noteBottom = bottom || y + 200;
+        const overlaps =
+          x < bucketRect.right &&
+          noteRight > bucketRect.left &&
+          y < bucketRect.bottom &&
+          noteBottom > bucketRect.top;
 
-        if (overBucket) {
-          // Mark as done: move to kanban "done" column
+        if (overlaps) {
           onUpdateNote(id, { column: 'done' });
         } else {
           onUpdateNote(id, { x, y });

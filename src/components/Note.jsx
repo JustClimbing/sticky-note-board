@@ -142,7 +142,7 @@ export default function Note({
         noteRef.current.style.transform = '';
         noteRef.current.style.zIndex = '';
         noteRef.current.style.transition = '';
-        onDragEnd(note.id, rect.left, rect.top);
+        onDragEnd(note.id, rect.left, rect.top, rect.right, rect.bottom);
       }
     },
     [isDragging, isResizing, note.id, onDragEnd, onUpdate]
